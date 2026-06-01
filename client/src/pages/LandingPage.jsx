@@ -68,7 +68,7 @@ export default function LandingPage() {
           </p>
 
           <div className="landing-actions">
-            <button type="button" className="btn btn-primary" onClick={() => navigate('/login')}>
+            <button type="button" className="btn btn-primary" onClick={() => navigate('/register')}>
               Creează cont
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => navigate('/login')}>

@@ -15,11 +15,11 @@ import { API } from '../shared/constants.js';
 // onLogin - functia din App.jsx care salveaza datele dupa autentificare
 // -----------------------------------------------------------------------
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, startRegister }) {
   const navigate = useNavigate();
 
-  // controlez daca e in modul login sau register
-  const [isLogin, setIsLogin] = useState(true);
+  // startRegister vine din ruta /register si deschide direct formularul de cont nou
+  const [isLogin, setIsLogin] = useState(!startRegister);
 
   // campurile formularului
   const [nickname, setNickname] = useState('');
