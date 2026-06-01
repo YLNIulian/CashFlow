@@ -1,3 +1,6 @@
 node_modules
 .env
 .DS_Store
+client/dist
+PREZENTARE_PROIECT.txt
+Ghid_Cashflow.pdf
