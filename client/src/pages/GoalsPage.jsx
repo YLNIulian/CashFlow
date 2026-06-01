@@ -19,7 +19,8 @@ import {
 import { useScrollReveal } from '../shared/hooks.jsx';
 import { EmptyState, LoadingCard } from '../shared/components.jsx';
 
-export default function GoalsPage({ userId, transactions }) {
+// Fix 4+5: primesc si onDeposit ca sa pot anunta App.jsx sa refresheze tranzactiile
+export default function GoalsPage({ userId, transactions, onDeposit }) {
   const revealRef = useScrollReveal();
 
   const [goals, setGoals] = useState([]);
@@ -84,15 +85,31 @@ export default function GoalsPage({ userId, transactions }) {
     fetchGoals();
   };
 
-  // adaug o suma la un obiectiv (nu poate depasi tinta)
+  // Fix 4+5: depun bani in obiectiv SI creez o tranzactie expense
+  // asa soldul total scade automat, fara sa schimb nimic din structura
   const handleDeposit = async (goal, amount) => {
     const currentAmount = Math.min(
       safeNumber(goal.currentAmount) + amount,
       safeNumber(goal.targetAmount)
     );
 
+    // actualizez suma din obiectiv
     await axios.put(`${API}/api/goals/${goal._id}`, { currentAmount });
+
+    // creez si o tranzactie ca sa se reflecte in sold
+    await axios.post(`${API}/api/transactions`, {
+      userId,
+      type: 'expense',
+      category: 'other_exp',
+      description: `Goal: ${goal.title}`,
+      amount,
+      date: new Date().toISOString().slice(0, 10),
+      scope: 'personal',
+    });
+
     fetchGoals();
+    // anunt App.jsx sa refresheze tranzactiile → soldul se recalculeaza
+    if (onDeposit) onDeposit();
   };
 
   // sterg un obiectiv

@@ -18,6 +18,7 @@ import {
   CashFlowIcon,
   ForecastingIcon,
   LailaLogoIcon,
+  ChevronDownIcon,
 } from '../shared/icons.jsx';
 
 import { NAV_PERSONAL, NAV_COUPLES, NAV_BUSINESS } from '../shared/constants.js';
@@ -51,6 +52,8 @@ export default function Sidebar({
   const [supportOpen, setSupportOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Fix 7: starea pentru sectiunea Tips & Insights colapsibila
+  const [tipsOpen, setTipsOpen] = useState(false);
 
   // aleg meniul potrivit in functie de modul curent
   const navItems = mode === 'couples'
@@ -189,6 +192,42 @@ export default function Sidebar({
             <small>Ajutor, feedback și link de invitație</small>
           </span>
         </button>
+      </div>
+
+      {/* Fix 7: sectiunea Tips & Insights colapsibila */}
+      <div className="sidebar-tips-section">
+        <button
+          type="button"
+          className="sidebar-tips-toggle"
+          onClick={() => setTipsOpen((v) => !v)}
+        >
+          <SparkIcon size={14} />
+          <span>Tips & Insights</span>
+          <span className={`sidebar-tips-arrow ${tipsOpen ? 'open' : ''}`}>
+            <ChevronDownIcon size={13} />
+          </span>
+        </button>
+
+        {tipsOpen && (
+          <div className="sidebar-tips-list">
+            <div className="sidebar-tip-card">
+              <span>💡</span>
+              <p>Regula 50/30/20: 50% nevoi, 30% dorințe, 20% economii.</p>
+            </div>
+            <div className="sidebar-tip-card">
+              <span>🛡️</span>
+              <p>Fond de urgență: ideal 3-6 luni de cheltuieli rezervate.</p>
+            </div>
+            <div className="sidebar-tip-card">
+              <span>📅</span>
+              <p>Plătește-te pe tine primul — separă economiile la început de lună.</p>
+            </div>
+            <div className="sidebar-tip-card">
+              <span>🔍</span>
+              <p>Cheltuielile mici se adună. Urmărește-le săptămânal!</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* footer: toggle tema + informatii user + buton logout */}

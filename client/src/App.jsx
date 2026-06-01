@@ -346,10 +346,12 @@ function AppShell() {
           <Route path="/reports" element={<ReportsPage transactions={transactions} />} />
           <Route path="/budget" element={<BudgetPage transactions={transactions} />} />
           <Route path="/recurring" element={<RecurringPage transactions={transactions} />} />
-          <Route path="/goals" element={<GoalsPage userId={userId} transactions={transactions} />} />
+          {/* Fix 4+5: onDeposit refresheaza tranzactiile cand se depune in goal */}
+          <Route path="/goals" element={<GoalsPage userId={userId} transactions={transactions} onDeposit={fetchTransactions} />} />
           <Route path="/investments" element={<InvestmentsPage transactions={transactions} />} />
           <Route path="/forecasting" element={<ForecastingPage transactions={transactions} />} />
-          <Route path="/advice" element={<AdvicePage transactions={transactions} />} />
+          {/* Fix 6: chatul AI are nevoie de userId + userNickname pentru raspunsuri personalizate */}
+          <Route path="/advice" element={<AdvicePage transactions={transactions} userId={userId} userNickname={userNickname} />} />
 
           <Route
             path="/profile"
@@ -394,7 +396,7 @@ function AppShell() {
           />
 
           <Route path="/couple/budget" element={<BudgetPage transactions={transactions} scope="couples" />} />
-          <Route path="/couple/goals" element={<GoalsPage userId={userId} transactions={transactions} />} />
+          <Route path="/couple/goals" element={<GoalsPage userId={userId} transactions={transactions} onDeposit={fetchTransactions} />} />
           <Route path="/couple/advice" element={<AdvicePage transactions={transactions} />} />
 
           {/* ---- PAGINI BUSINESS ---- */}

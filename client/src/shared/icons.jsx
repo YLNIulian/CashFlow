@@ -283,6 +283,25 @@ export function SparkIcon({ size = 18 }) {
   );
 }
 
+// icon sageata pentru colaps/expand (folosit in sidebar tips)
+export function ChevronDownIcon({ size = 14 }) {
+  return (
+    <IconShell size={size} strokeWidth={2.2}>
+      <path d="M6 9l6 6 6-6" />
+    </IconShell>
+  );
+}
+
+// icon de trimitere mesaj - folosit in chatul AI
+export function SendIcon({ size = 18 }) {
+  return (
+    <IconShell size={size}>
+      <path d="M22 2L11 13" />
+      <path d="M22 2L15 22l-4-9-9-4 20-7Z" />
+    </IconShell>
+  );
+}
+
 export function CalendarIcon({ size = 18 }) {
   return (
     <IconShell size={size}>

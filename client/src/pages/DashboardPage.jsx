@@ -500,7 +500,8 @@ export default function Dashboard({
               </span>
             </div>
 
-            <div className={`balance-amount ${totalSummary.balance >= 0 ? 'positive' : 'negative'}`}>
+            {/* Fix 1: culoarea soldului e mereu neutra - nu mai e verde/rosu */}
+            <div className="balance-amount">
               {formatCurrency(animatedBalance, { signed: true })}
             </div>
 

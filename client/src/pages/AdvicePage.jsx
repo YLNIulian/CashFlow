@@ -1,223 +1,306 @@
-/* ═══════════════════════════════════════════════════════════════════════
-   ADVICE PAGE — recomandări financiare personalizate (/advice)
-   Recomandările sunt generate dinamic din datele de tranzacții.
-   Filtrate pe categorii: Save / Spend / Invest / etc.
-   ═══════════════════════════════════════════════════════════════════════ */
+// AdvicePage.jsx - chat AI local cu asistentul financiar (/advice)
+// Nu foloseste niciun API extern - analizeaza datele reale ale userului
+// si genereaza raspunsuri inteligente in romana, complet offline
+// Fisier: src/pages/AdvicePage.jsx
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import axios from 'axios';
 
-import {
-  AlertIcon,
-  CheckIcon,
-  GoalsIcon,
-  CashFlowIcon,
-  InvestmentsIcon,
-  ChevronIcon,
-} from '../shared/icons.jsx';
+import { SparkIcon, SendIcon } from '../shared/icons.jsx';
+import { API } from '../shared/constants.js';
 
 import {
   getPersonalTransactions,
   summarizeTransactions,
+  getMonthlyTransactions,
   buildCategoryBreakdown,
   formatCurrency,
+  safeNumber,
 } from '../shared/helpers.js';
 
 import { useScrollReveal } from '../shared/hooks.jsx';
 
-/* ═══════════════════════════════════════════════════════════════════════
-   ADVICE PAGE COMPONENT
-   Props:
-   - transactions → toate tranzacțiile
-   ═══════════════════════════════════════════════════════════════════════ */
+// -----------------------------------------------------------------------
+// MOTORUL LOCAL DE RASPUNSURI
+// Analizeaza mesajul userului si returneaza un raspuns bazat pe datele reale
+// -----------------------------------------------------------------------
 
-export default function AdvicePage({ transactions }) {
+function generateResponse(message, { summary, monthSummary, categoryData, goals, name }) {
+  const msg = message.toLowerCase().trim();
+  const fmt = (n) => formatCurrency(n);
+
+  // --- cum stau cu cheltuielile / luna asta ---
+  if (msg.includes('cheltuiel') || msg.includes('luna asta') || msg.includes('cum stau') || msg.includes('lunar') || msg.includes('stau')) {
+    if (monthSummary.income === 0 && monthSummary.expense === 0) {
+      return `${name}, nu ai tranzacții luna asta încă 📭 Adaugă primele venituri și cheltuieli și îți voi putea spune exact cum stai!`;
+    }
+
+    const ratio = monthSummary.income > 0
+      ? Math.round((monthSummary.expense / monthSummary.income) * 100)
+      : 100;
+
+    if (ratio > 100) {
+      return `${name}, luna asta ai cheltuit **${fmt(monthSummary.expense)}** dar ai câștigat doar **${fmt(monthSummary.income)}** 😬 Ești pe minus cu ${fmt(Math.abs(monthSummary.balance))}. E momentul să reduci cheltuielile!`;
+    } else if (ratio > 85) {
+      return `${name}, ai cheltuit **${fmt(monthSummary.expense)}** din **${fmt(monthSummary.income)}** venituri — ${ratio}% 🟡 Ești aproape de limită! Îți rămân doar ${fmt(monthSummary.balance)} pentru restul lunii.`;
+    } else if (ratio > 60) {
+      return `Luna asta arăți bine, ${name}! 📊 Ai cheltuit **${fmt(monthSummary.expense)}** din **${fmt(monthSummary.income)}** (${ratio}%). Îți rămân **${fmt(monthSummary.balance)}** disponibili — ritm decent!`;
+    } else {
+      return `Excelent, ${name}! 🎉 Ai cheltuit doar **${fmt(monthSummary.expense)}** din **${fmt(monthSummary.income)}** venituri (${ratio}%). Economisești serios — ai **${fmt(monthSummary.balance)}** la dispoziție!`;
+    }
+  }
+
+  // --- unde cheltuiesc cel mai mult / categorii ---
+  if (msg.includes('cel mai mult') || msg.includes('categor') || msg.includes('unde') || msg.includes('banii') || msg.includes('pe ce')) {
+    if (categoryData.length === 0) {
+      return `${name}, nu am găsit cheltuieli înregistrate încă 📭 Adaugă câteva tranzacții de tip Expense și îți voi arăta exact unde se duc banii!`;
+    }
+
+    const top = categoryData[0];
+    const percent = summary.expense > 0 ? Math.round((top.value / summary.expense) * 100) : 0;
+    const second = categoryData[1];
+
+    let response = `${name}, cheltuiești cel mai mult pe **${top.label}** — ${fmt(top.value)} (${percent}% din total) 🎯`;
+    if (second) {
+      response += ` Pe locul 2 e **${second.label}** cu ${fmt(second.value)}.`;
+    }
+    response += ` Dacă vrei să economisești, **${top.label}** e locul de unde să înceapă tăierile!`;
+    return response;
+  }
+
+  // --- obiective / goals / imi permit ---
+  if (msg.includes('obiectiv') || msg.includes('goal') || msg.includes('permit') || msg.includes('economis') || msg.includes('pot')) {
+    const active = goals.filter(g => safeNumber(g.currentAmount) < safeNumber(g.targetAmount));
+    const done = goals.filter(g => safeNumber(g.currentAmount) >= safeNumber(g.targetAmount));
+
+    if (goals.length === 0) {
+      return `${name}, nu ai niciun obiectiv setat! 🎯 Ai un sold de **${fmt(summary.balance)}**. E momentul perfect să setezi primul obiectiv — un fond de urgență sau ceva ce îți dorești!`;
+    }
+
+    if (summary.balance <= 0) {
+      return `${name}, momentan soldul tău e **${fmt(summary.balance)}** 😬 Nu aș recomanda obiective noi acum. Mai întâi echilibrează veniturile cu cheltuielile!`;
+    }
+
+    let response = `${name}, ai **${active.length} obiective active**`;
+    if (done.length > 0) response += ` și **${done.length} finalizate** 🏆`;
+    response += `! Cu un sold de **${fmt(summary.balance)}**, `;
+    response += summary.balance > 5000
+      ? `poți susține confortabil obiectivele existente și poate adăuga unul nou! 💪`
+      : `concentrează-te pe obiectivele existente înainte de a adăuga altele noi.`;
+    return response;
+  }
+
+  // --- sfat financiar ---
+  if (msg.includes('sfat') || msg.includes('recomand') || msg.includes('ajut') || msg.includes('ce fac') || msg.includes('ce sa') || msg.includes('financiar')) {
+    const savingsRate = summary.income > 0
+      ? Math.round(((summary.income - summary.expense) / summary.income) * 100)
+      : 0;
+
+    if (savingsRate < 0) {
+      return `${name}, sfat important: **cheltuielile sunt mai mari decât veniturile** ⚠️ Rata de economisire: ${savingsRate}%. Prioritatea 1 este să intri pe plus — identifică 2-3 cheltuieli pe care le poți reduce chiar acum!`;
+    } else if (savingsRate < 10) {
+      return `${name}, economisești **${savingsRate}%** din venituri 💡 Targetul ideal e 20%+. Încearcă regula **50/30/20**: 50% nevoi, 30% dorințe, 20% economii. Micile ajustări fac diferența mare în timp!`;
+    } else if (savingsRate < 20) {
+      return `${name}, economisești **${savingsRate}%** — ești pe drumul bun! 🌱 Încearcă să crești până la 20%+. Sfat: automatizează o sumă fixă spre economii la **începutul lunii**, înainte să cheltuiești altceva!`;
+    } else {
+      return `${name}, economisești **${savingsRate}%** din venituri — ești în top! 🌟 Sfatul meu: dacă nu ai deja un fond de urgență de 3-6 luni de cheltuieli (${fmt(monthSummary.expense * 5)} ar fi ideal), acela e priority #1 înainte de orice investiție!`;
+    }
+  }
+
+  // --- sold total ---
+  if (msg.includes('sold') || msg.includes('total') || msg.includes('cat am') || msg.includes('câți') || msg.includes('balance')) {
+    return `${name}, soldul tău total este **${fmt(summary.balance)}** 💰 Din care: venituri ${fmt(summary.income)}, cheltuieli ${fmt(summary.expense)}. ${summary.balance >= 0 ? 'Ești pe plus — bine! 👍' : 'Atenție, ești pe minus! 😬'}`;
+  }
+
+  // --- raspuns generic cu date reale ---
+  if (summary.count === 0) {
+    return `Bună ${name}! 👋 Nu ai adăugat tranzacții încă. Du-te la pagina **Transactions** și adaugă primele venituri și cheltuieli — abia atunci îți pot da sfaturi bazate pe datele tale reale!`;
+  }
+
+  return `${name}, am analizat datele tale! 🤔 Ai un sold de **${fmt(summary.balance)}** și **${summary.count} tranzacții** înregistrate. Poți să mă întrebi: *"Cum stau cu cheltuielile?"*, *"Unde cheltuiesc cel mai mult?"*, *"Pot să îmi permit un obiectiv?"* sau *"Dă-mi un sfat financiar"*!`;
+}
+
+// -----------------------------------------------------------------------
+// HELPER - randeaza textul cu bold (**text** → <strong>text</strong>)
+// -----------------------------------------------------------------------
+
+function renderText(text) {
+  const parts = text.split(/\*\*(.*?)\*\*/g);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+  );
+}
+
+// -----------------------------------------------------------------------
+// ADVICE PAGE COMPONENT
+// -----------------------------------------------------------------------
+
+export default function AdvicePage({ transactions, userId, userNickname }) {
   const revealRef = useScrollReveal();
-  const [activeCategory, setActiveCategory] = useState('recommendations');
 
+  // starea conversatiei
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [goals, setGoals] = useState([]);
+
+  const messagesEndRef = useRef(null);
+
+  const name = userNickname || 'utilizator';
+
+  // iau obiectivele ca sa le pot referentia in raspunsuri
+  useEffect(() => {
+    if (!userId) return;
+    axios.get(`${API}/api/goals/${userId}`)
+      .then((r) => setGoals(r.data || []))
+      .catch(() => setGoals([]));
+  }, [userId]);
+
+  // scroll automat la ultimul mesaj
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isTyping]);
+
+  // calculez datele financiare pentru motorul de raspunsuri
   const personalTx = useMemo(() => getPersonalTransactions(transactions), [transactions]);
   const summary = useMemo(() => summarizeTransactions(personalTx), [personalTx]);
+  const monthSummary = useMemo(() => summarizeTransactions(getMonthlyTransactions(personalTx)), [personalTx]);
   const categoryData = useMemo(() => buildCategoryBreakdown(personalTx), [personalTx]);
 
-  const biggest = categoryData[0];
+  // trimit un mesaj si generez raspunsul local
+  const sendMessage = useCallback(async (text) => {
+    const trimmed = text.trim();
+    if (!trimmed || isTyping) return;
 
-  /* ─── Generare recomandări dinamice ──────────────────────────────── */
-  const recommendations = useMemo(() => {
-    const items = [];
+    setInput('');
 
-    /* Rată de economisire */
-    if (summary.income > 0) {
-      const rate = Math.round(((summary.income - summary.expense) / summary.income) * 100);
+    // adaug mesajul userului
+    setMessages((prev) => [...prev, {
+      id: Date.now(),
+      role: 'user',
+      text: trimmed,
+    }]);
 
-      if (rate < 10) {
-        items.push({
-          id: 'savings',
-          Icon: AlertIcon,
-          tone: 'warning',
-          tag: 'SAVE',
-          title: 'Increase savings rate',
-          description: `Your current savings rate is ${rate}%. Try setting one automatic transfer or reduce one flexible category.`,
-          progress: Math.max(rate, 8),
-          tasks: 5,
-        });
-      } else {
-        items.push({
-          id: 'savings-good',
-          Icon: CheckIcon,
-          tone: 'good',
-          tag: 'SAVE',
-          title: 'Savings rhythm looks healthy',
-          description: `You are saving around ${rate}% based on tracked income and expenses. Keep the rhythm.`,
-          progress: Math.min(rate, 100),
-          tasks: 3,
-        });
-      }
-    }
+    // arat animatia de typing
+    setIsTyping(true);
 
-    /* Cea mai mare categorie de cheltuieli */
-    if (biggest) {
-      items.push({
-        id: 'spend',
-        Icon: biggest.Icon,
-        tone: 'spend',
-        tag: 'SPEND',
-        title: `Review ${biggest.label}`,
-        description: `${formatCurrency(biggest.value)} is currently your largest tracked spending area. A small limit here can have a big effect.`,
-        progress: summary.expense > 0 ? Math.round((biggest.value / summary.expense) * 100) : 0,
-        tasks: 4,
-      });
-    }
+    // simulez o pauza de gandire (800-1400ms)
+    await new Promise((resolve) => setTimeout(resolve, 900 + trimmed.length * 8));
 
-    /* Fond de urgență */
-    items.push({
-      id: 'home',
-      Icon: GoalsIcon,
-      tone: 'save',
-      tag: 'SAVE',
-      title: 'Build an emergency fund',
-      description: 'A simple first target is one month of expenses. Then increase towards three to six months.',
-      progress: summary.expense > 0 && summary.balance > 0
-        ? Math.min(Math.round((summary.balance / summary.expense) * 100), 100)
-        : 10,
-      tasks: 7,
+    // generez raspunsul local bazat pe datele reale
+    const response = generateResponse(trimmed, {
+      summary, monthSummary, categoryData, goals, name,
     });
 
-    /* Urmărire cash flow */
-    items.push({
-      id: 'cashflow',
-      Icon: CashFlowIcon,
-      tone: 'cash',
-      tag: 'SPEND',
-      title: 'Track cash flow weekly',
-      description: 'Check your net flow once a week to catch overspending early, not at the end of the month.',
-      progress: personalTx.length > 0 ? 45 : 5,
-      tasks: 6,
-    });
+    setIsTyping(false);
+    setMessages((prev) => [...prev, {
+      id: Date.now() + 1,
+      role: 'assistant',
+      text: response,
+    }]);
+  }, [isTyping, summary, monthSummary, categoryData, goals, name]);
 
-    /* Pregătire pentru investiții */
-    items.push({
-      id: 'invest',
-      Icon: InvestmentsIcon,
-      tone: 'invest',
-      tag: 'INVEST',
-      title: 'Prepare for investing',
-      description: 'Before investing, stabilize emergency savings and remove high-interest debt if present.',
-      progress: summary.balance > 0 ? 35 : 8,
-      tasks: 4,
-    });
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    sendMessage(input);
+  };
 
-    return items;
-  }, [summary, biggest, personalTx.length]);
-
-  /* ─── Filtre categorii din sidebar ──────────────────────────────── */
-  const categories = [
-    { id: 'recommendations', label: 'Recommendations' },
-    { id: 'save', label: 'Save up' },
-    { id: 'spend', label: 'Spend' },
-    { id: 'paydown', label: 'Pay down' },
-    { id: 'protect', label: 'Protect' },
-    { id: 'invest', label: 'Invest' },
-    { id: 'wellness', label: 'Wellness' },
+  // intrebarile sugerate ca chips-uri
+  const chips = [
+    'Cum stau cu cheltuielile luna asta?',
+    'Unde cheltuiesc cel mai mult?',
+    'Pot să îmi permit un obiectiv nou?',
+    'Dă-mi un sfat financiar',
   ];
 
-  const filteredRecommendations = activeCategory === 'recommendations'
-    ? recommendations
-    : recommendations.filter((item) => {
-      if (activeCategory === 'save') return item.tag === 'SAVE';
-      if (activeCategory === 'spend') return item.tag === 'SPEND';
-      if (activeCategory === 'invest') return item.tag === 'INVEST';
-      return true;
-    });
+  const isEmpty = messages.length === 0;
 
   return (
-    <div className="content-shell advice-page" ref={revealRef}>
+    <div className="content-shell" ref={revealRef}>
 
-      {/* ── Header ──────────────────────────────────────────────────── */}
+      {/* header pagina */}
       <header className="page-topbar scroll-reveal">
         <div>
-          <p className="page-kicker">Guidance</p>
-          <h1>Recommendations</h1>
-          <span>Prioritized ideas based on your current financial picture</span>
+          <p className="page-kicker">AI Assistant</p>
+          <h1>Asistent financiar</h1>
+          <span>Întreabă-mă orice despre finanțele tale</span>
         </div>
       </header>
 
-      <section className="advice-layout">
+      <div className="advice-chat-layout scroll-reveal">
 
-        {/* ── Lista de recomandări ──────────────────────────────────── */}
-        <main className="advice-main scroll-reveal">
-          <div className="advice-card-head">
-            <h2>Prioritized by your data</h2>
-            <button type="button" onClick={() => setActiveCategory('recommendations')}>Reset</button>
-          </div>
+        {/* fereastra de chat cu mesajele */}
+        <div className="chat-window">
+          {isEmpty ? (
+            /* starea initiala - salut si instructiuni */
+            <div className="chat-empty">
+              <div className="chat-empty-icon">
+                <SparkIcon size={26} />
+              </div>
+              <h3>Bună, {name}! 👋</h3>
+              <p>Sunt asistentul tău financiar.<br />Analizez datele tale reale și îți dau sfaturi concrete.</p>
+            </div>
+          ) : (
+            /* lista de mesaje */
+            messages.map((msg) => (
+              <div key={msg.id} className={`chat-message ${msg.role}`}>
+                <div className="chat-avatar">
+                  {msg.role === 'user'
+                    ? (name[0] || 'U').toUpperCase()
+                    : <SparkIcon size={15} />}
+                </div>
+                <div className="chat-bubble">
+                  {renderText(msg.text)}
+                </div>
+              </div>
+            ))
+          )}
 
-          <div className="advice-list tab-pane-enter" key={activeCategory}>
-            {filteredRecommendations.map((item, index) => {
-              const Icon = item.Icon;
+          {/* animatie de typing cat timp se "gandeste" */}
+          {isTyping && (
+            <div className="chat-message assistant">
+              <div className="chat-avatar"><SparkIcon size={15} /></div>
+              <div className="chat-bubble chat-typing">
+                <span /><span /><span />
+              </div>
+            </div>
+          )}
 
-              return (
-                <article key={item.id} className={`advice-item ${item.tone}`} style={{ '--delay': `${index * 60}ms` }}>
-                  <div className="advice-item-icon">
-                    <Icon size={22} />
-                    <span>{item.tag}</span>
-                  </div>
+          <div ref={messagesEndRef} />
+        </div>
 
-                  <div className="advice-item-content">
-                    <h3>{item.title}</h3>
-                    <p>{item.description}</p>
+        {/* chips-urile cu intrebari sugerate */}
+        <div className="chat-chips">
+          {chips.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              className="chat-chip"
+              onClick={() => sendMessage(chip)}
+              disabled={isTyping}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
 
-                    <div className="advice-progress">
-                      <span style={{ width: `${Math.min(item.progress, 100)}%` }} />
-                    </div>
-
-                    <small>
-                      {item.progress >= 85 ? 'Almost done' : 'In progress'} · {item.tasks} tasks to complete
-                    </small>
-                  </div>
-
-                  <ChevronIcon size={18} />
-                </article>
-              );
-            })}
-          </div>
-        </main>
-
-        {/* ── Sidebar categorii ─────────────────────────────────────── */}
-        <aside className="advice-side scroll-reveal">
-          <h2>Categories</h2>
-
-          <div className="advice-category-list">
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                type="button"
-                className={activeCategory === category.id ? 'active' : ''}
-                onClick={() => setActiveCategory(category.id)}
-              >
-                {category.label}
-              </button>
-            ))}
-          </div>
-        </aside>
-      </section>
+        {/* campul de input si butonul de trimitere */}
+        <form className="chat-input-row" onSubmit={handleSubmit}>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Scrie un mesaj..."
+            disabled={isTyping}
+          />
+          <button
+            type="submit"
+            className="chat-send-btn"
+            disabled={!input.trim() || isTyping}
+          >
+            <SendIcon size={16} />
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
