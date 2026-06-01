@@ -52,7 +52,7 @@ export default function Sidebar({
   const [supportOpen, setSupportOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  // Fix 7: starea pentru sectiunea Tips & Insights colapsibila
+  // starea pentru sectiunea Tips & Insights colapsibila
   const [tipsOpen, setTipsOpen] = useState(false);
 
   // aleg meniul potrivit in functie de modul curent
@@ -194,7 +194,7 @@ export default function Sidebar({
         </button>
       </div>
 
-      {/* Fix 7: sectiunea Tips & Insights colapsibila */}
+      {/* sectiunea Tips & Insights colapsibila */}
       <div className="sidebar-tips-section">
         <button
           type="button"

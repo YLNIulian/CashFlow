@@ -346,11 +346,11 @@ function AppShell() {
           <Route path="/reports" element={<ReportsPage transactions={transactions} />} />
           <Route path="/budget" element={<BudgetPage transactions={transactions} />} />
           <Route path="/recurring" element={<RecurringPage transactions={transactions} />} />
-          {/* Fix 4+5: onDeposit refresheaza tranzactiile cand se depune in goal */}
+          {/* trimit si onDeposit ca sa se actualizeze soldul cand se depune in goal */}
           <Route path="/goals" element={<GoalsPage userId={userId} transactions={transactions} onDeposit={fetchTransactions} />} />
           <Route path="/investments" element={<InvestmentsPage transactions={transactions} />} />
           <Route path="/forecasting" element={<ForecastingPage transactions={transactions} />} />
-          {/* Fix 6: chatul AI are nevoie de userId + userNickname pentru raspunsuri personalizate */}
+          {/* chatul AI are nevoie de userId si userNickname pentru raspunsuri personalizate */}
           <Route path="/advice" element={<AdvicePage transactions={transactions} userId={userId} userNickname={userNickname} />} />
 
           <Route

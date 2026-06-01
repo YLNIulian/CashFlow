@@ -356,7 +356,8 @@ select {
   flex-direction: column;
   gap: 4px;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 2px;
 }
 
@@ -551,7 +552,7 @@ select {
 }
 
 /* -----------------------------------------------------------------------
-   FIX 7 - TIPS & INSIGHTS in sidebar
+   TIPS & INSIGHTS in sidebar
    Sectiune colapsibila cu sfaturi financiare statice
    ----------------------------------------------------------------------- */
 
@@ -1361,11 +1362,11 @@ select option {
   font-size: 52px;
   font-weight: 850;
   letter-spacing: -0.065em;
-  /* Fix 1: soldul e mereu neutru - nu mai mosteneste verde/rosu din .positive/.negative */
+  /* soldul e mereu neutru - nu mosteneste verde/rosu */
   color: var(--text);
 }
 
-/* Fix 3: butonul din topbar e centrat vertical cu textul din stanga */
+/* butonul din topbar e centrat vertical cu textul din stanga */
 .topbar-actions {
   align-self: center;
 }
@@ -4265,8 +4266,8 @@ select:focus {
 }
 
 /* -----------------------------------------------------------------------
-   BUDGET FIX - fix-uri specifice pentru pagina de budget
-   Am adaugat aceste stiluri dupa ce am testat pagina si am vazut probleme
+   BUDGET - stiluri suplimentare pentru pagina de buget
+   Am adaugat aceste stiluri dupa testare
    ----------------------------------------------------------------------- */
 
 .budget-overview-grid,
@@ -5379,7 +5380,7 @@ a svg,
 /* imbunatatiri de lizibilitate pentru pagina de advice */
 
 /* -----------------------------------------------------------------------
-   FIX 6 - CHAT AI LOCAL (/advice)
+   CHAT AI LOCAL (/advice)
    .advice-chat-layout = containerul principal al chat-ului
    .chat-window = zona scrollabila cu mesajele
    .chat-message.user = mesajul userului (dreapta, verde)

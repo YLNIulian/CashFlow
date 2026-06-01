@@ -25,9 +25,154 @@ import { useScrollReveal } from '../shared/hooks.jsx';
 // Analizeaza mesajul userului si returneaza un raspuns bazat pe datele reale
 // -----------------------------------------------------------------------
 
-function generateResponse(message, { summary, monthSummary, categoryData, goals, name }) {
+function generateResponse(message, { summary, monthSummary, categoryData, goals, name, personalTx }) {
   const msg = message.toLowerCase().trim();
   const fmt = (n) => formatCurrency(n);
+
+  // --- detectez intrebarile fara legatura cu finantele ---
+  const financialKeywords = [
+    'cheltuiel', 'venit', 'sold', 'bani', 'obiectiv', 'economis', 'sfat',
+    'financiar', 'lunar', 'categor', 'tranzact', 'buget', 'permit', 'cat am',
+    'câți', 'unde', 'cel mai mult', 'luna asta', 'cum stau', 'balance', 'total',
+    'ajut', 'recomand', 'ce fac', 'goal', 'stau', 'cumpăr', 'cumpar', 'achizit',
+    'câștig', 'castig', 'salariu', 'disponibil', 'ramas', 'rămas', 'mai am',
+    'trecuta', 'trecută', 'comparati', 'fata de', 'față de', 'cea mai mare',
+    'investi', 'acții', 'actii', 'azi', 'astăzi', 'ieri', 'merit', 'iau',
+    'cât mai', 'cat mai', 'câștigat', 'castigat',
+  ];
+  const isFinancial = financialKeywords.some((kw) => msg.includes(kw));
+
+  if (!isFinancial) {
+    const preview = message.length > 35 ? `${message.slice(0, 35)}...` : message;
+    return `Eu mă ocup doar de finanțele tale, ${name}! 😊 Nu știu să răspund la "${preview}". Încearcă: "Cum stau cu cheltuielile?" sau "Pot să cumpăr ceva de 1000 RON?"`;
+  }
+
+  // --- pot sa cumpar X / imi permit ---
+  if (msg.includes('cumpăr') || msg.includes('cumpar') || msg.includes('îmi permit') || msg.includes('imi permit') || msg.includes('merit') || msg.includes('achizit') || msg.includes('iau un') || msg.includes('iau o')) {
+    // extrag suma din mesaj daca exista (ex: "pot sa cumpar ceva de 2000 ron")
+    const numbers = message.match(/\d+(?:[.,]\d+)?/g);
+    const amount = numbers ? Math.max(...numbers.map((n) => parseFloat(n.replace(',', '.')))) : null;
+
+    if (amount && amount > 0) {
+      if (summary.balance <= 0) {
+        return `${name}, cu soldul actual de **${fmt(summary.balance)}** nu îți recomand să cumperi ceva de **${fmt(amount)}** acum 😬 Mai întâi intră pe plus!`;
+      } else if (amount > summary.balance) {
+        return `${name}, **${fmt(amount)}** depășește soldul tău de **${fmt(summary.balance)}** ❌ Nu îți recomand această achiziție. Economisește mai întâi!`;
+      } else if (amount > summary.balance * 0.5) {
+        const pct = Math.round((amount / summary.balance) * 100);
+        return `${name}, **${fmt(amount)}** reprezintă **${pct}%** din soldul tău de **${fmt(summary.balance)}** ⚠️ E mult! Asigură-te că mai ai bani pentru urgențe înainte să cumperi.`;
+      } else if (amount > summary.balance * 0.2) {
+        const pct = Math.round((amount / summary.balance) * 100);
+        return `${name}, tehnic poți cumpăra ceva de **${fmt(amount)}** — ai **${fmt(summary.balance)}** și reprezintă **${pct}%** 🤔 Gândește-te dacă e o necesitate sau o dorință.`;
+      } else {
+        const pct = Math.round((amount / summary.balance) * 100);
+        return `${name}, **${fmt(amount)}** e accesibil! Reprezintă doar **${pct}%** din soldul tău de **${fmt(summary.balance)}** ✅ Dacă ai nevoie de el, mergi!`;
+      }
+    }
+
+    // nu a specificat suma — il rog sa o spuna
+    if (summary.balance <= 0) {
+      return `${name}, momentan soldul tău e **${fmt(summary.balance)}** 😬 Nu e momentul potrivit pentru achiziții. Concentrează-te să intri pe plus!`;
+    }
+    return `${name}, ai **${fmt(summary.balance)}** disponibili 💰 Spune-mi suma exactă și îți spun dacă îți permiți! De ex: "Pot să cumpăr ceva de 2000 RON?"`;
+  }
+
+  // --- venituri / cat castig / salariu ---
+  if (msg.includes('venit') || msg.includes('câștig') || msg.includes('castig') || msg.includes('salariu') || msg.includes('câștigat') || msg.includes('castigat')) {
+    if (summary.income === 0) {
+      return `${name}, nu am venituri înregistrate 📭 Adaugă tranzacții de tip Income și îți voi arăta situația completă!`;
+    }
+    return `${name}, ai înregistrat **${fmt(summary.income)}** venituri totale 💵 Luna asta: **${fmt(monthSummary.income)}**. Cheltuielile lunii: ${fmt(monthSummary.expense)} — îți rămân **${fmt(monthSummary.balance)}**.`;
+  }
+
+  // --- cat mai am disponibil luna asta ---
+  if (msg.includes('disponibil') || msg.includes('mai am') || msg.includes('ramas') || msg.includes('rămas') || msg.includes('cât mai') || msg.includes('cat mai')) {
+    if (monthSummary.income === 0) {
+      return `${name}, nu ai venituri înregistrate luna asta 📭 Adaugă venitul și îți voi spune cât îți rămâne disponibil!`;
+    }
+    const available = monthSummary.balance;
+    if (available > 0) {
+      return `${name}, luna asta îți mai rămân **${fmt(available)}** disponibili 💰 Ai câștigat **${fmt(monthSummary.income)}** și ai cheltuit **${fmt(monthSummary.expense)}** până acum.`;
+    }
+    return `${name}, luna asta ai depășit veniturile cu **${fmt(Math.abs(available))}** 😬 Ai câștigat **${fmt(monthSummary.income)}** dar ai cheltuit **${fmt(monthSummary.expense)}**.`;
+  }
+
+  // --- comparatie cu luna trecuta ---
+  if (msg.includes('luna trecuta') || msg.includes('luna trecută') || msg.includes('comparati') || msg.includes('comparativ') || msg.includes('fata de') || msg.includes('față de')) {
+    const lastMonthDate = new Date();
+    lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+    const lastMonthTx = personalTx.filter((tx) => {
+      const d = new Date(tx.date);
+      return d.getMonth() === lastMonthDate.getMonth() && d.getFullYear() === lastMonthDate.getFullYear();
+    });
+
+    if (lastMonthTx.length === 0) {
+      return `${name}, nu am date din luna trecută pentru comparație 📭 Luna aceasta: cheltuieli **${fmt(monthSummary.expense)}**, venituri **${fmt(monthSummary.income)}**.`;
+    }
+
+    const lastExpense = lastMonthTx
+      .filter((tx) => tx.type === 'expense')
+      .reduce((sum, tx) => sum + safeNumber(tx.amount), 0);
+
+    const diff = monthSummary.expense - lastExpense;
+    const pct = lastExpense > 0 ? Math.round((Math.abs(diff) / lastExpense) * 100) : 0;
+
+    if (diff > 0) {
+      return `${name}, luna asta ai cheltuit **${fmt(monthSummary.expense)}** față de **${fmt(lastExpense)}** luna trecută — cu **${pct}% mai mult** 📈 Încearcă să revii la ritmul anterior!`;
+    } else if (diff < 0) {
+      return `${name}, luna asta ai cheltuit **${fmt(monthSummary.expense)}** față de **${fmt(lastExpense)}** luna trecută — cu **${pct}% mai puțin** 📉 Felicitări, te-ai descurcat mai bine!`;
+    }
+    return `${name}, cheltuielile lunii sunt similare cu luna trecută — **${fmt(monthSummary.expense)}** 📊 Ritm constant!`;
+  }
+
+  // --- cea mai mare cheltuiala / cel mai scump lucru ---
+  if (msg.includes('cea mai mare') || msg.includes('mai scump') || msg.includes('scumpă') || msg.includes('scumpa') || msg.includes('mult am cheltuit')) {
+    const expenses = personalTx.filter((tx) => tx.type === 'expense');
+    if (expenses.length === 0) {
+      return `${name}, nu ai cheltuieli înregistrate încă 📭 Adaugă câteva tranzacții!`;
+    }
+    const biggest = expenses.reduce((max, tx) => safeNumber(tx.amount) > safeNumber(max.amount) ? tx : max, expenses[0]);
+    const pct = summary.expense > 0 ? Math.round((safeNumber(biggest.amount) / summary.expense) * 100) : 0;
+    return `${name}, cea mai mare cheltuială a ta e **${biggest.description}** — **${fmt(biggest.amount)}** 🏷️ Reprezintă ${pct}% din totalul cheltuielilor tale.`;
+  }
+
+  // --- cheltuieli azi sau ieri ---
+  if (msg.includes('azi') || msg.includes('astăzi') || msg.includes('astazi') || msg.includes('ieri')) {
+    const isYesterday = msg.includes('ieri');
+    const targetDate = new Date();
+    if (isYesterday) targetDate.setDate(targetDate.getDate() - 1);
+    const targetKey = targetDate.toISOString().slice(0, 10);
+
+    const dayTx = personalTx.filter((tx) => new Date(tx.date).toISOString().slice(0, 10) === targetKey);
+    const dayExpense = dayTx.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + safeNumber(tx.amount), 0);
+    const dayIncome = dayTx.filter((tx) => tx.type === 'income').reduce((s, tx) => s + safeNumber(tx.amount), 0);
+    const label = isYesterday ? 'ieri' : 'azi';
+
+    if (dayTx.length === 0) {
+      return `${name}, ${label} nu ai înregistrat nicio tranzacție 📭`;
+    }
+
+    let response = `${name}, ${label} ai `;
+    if (dayExpense > 0) response += `cheltuit **${fmt(dayExpense)}**`;
+    if (dayIncome > 0) response += `${dayExpense > 0 ? ' și ' : ''}câștigat **${fmt(dayIncome)}**`;
+    response += ` (${dayTx.length} tranzacții)`;
+
+    const biggest = dayTx.filter((tx) => tx.type === 'expense').sort((a, b) => safeNumber(b.amount) - safeNumber(a.amount))[0];
+    if (biggest) response += `. Cea mai mare: **${biggest.description}** (${fmt(biggest.amount)})`;
+
+    return `${response} 📋`;
+  }
+
+  // --- investitii / actiuni / bursa ---
+  if (msg.includes('investi') || msg.includes('acții') || msg.includes('actii') || msg.includes('bursă') || msg.includes('bursa') || msg.includes('fond')) {
+    const savingsRate = summary.income > 0 ? Math.round(((summary.income - summary.expense) / summary.income) * 100) : 0;
+    if (summary.balance <= 0) {
+      return `${name}, nu îți recomand să investești acum — soldul e **${fmt(summary.balance)}** 😬 Primul pas e să stabilizezi cheltuielile și să intri pe plus!`;
+    } else if (savingsRate < 10) {
+      return `${name}, înainte de investiții ai nevoie de un fond de urgență 🛡️ Rata de economisire e **${savingsRate}%** — prea mică. Ajunge mai întâi la 20% economisit lunar, abia apoi gândește-te la investiții!`;
+    }
+    return `${name}, cu un sold de **${fmt(summary.balance)}** și o rată de economisire de **${savingsRate}%**, ești aproape pregătit! ✅ Înainte de orice investiție, asigură-te că ai un fond de urgență de **${fmt(monthSummary.expense * 4)}–${fmt(monthSummary.expense * 6)}** (3-6 luni de cheltuieli).`;
+  }
 
   // --- cum stau cu cheltuielile / luna asta ---
   if (msg.includes('cheltuiel') || msg.includes('luna asta') || msg.includes('cum stau') || msg.includes('lunar') || msg.includes('stau')) {
@@ -117,7 +262,8 @@ function generateResponse(message, { summary, monthSummary, categoryData, goals,
     return `Bună ${name}! 👋 Nu ai adăugat tranzacții încă. Du-te la pagina **Transactions** și adaugă primele venituri și cheltuieli — abia atunci îți pot da sfaturi bazate pe datele tale reale!`;
   }
 
-  return `${name}, am analizat datele tale! 🤔 Ai un sold de **${fmt(summary.balance)}** și **${summary.count} tranzacții** înregistrate. Poți să mă întrebi: *"Cum stau cu cheltuielile?"*, *"Unde cheltuiesc cel mai mult?"*, *"Pot să îmi permit un obiectiv?"* sau *"Dă-mi un sfat financiar"*!`;
+  // raspuns generic - fara asteriscuri single ca sa nu apara literal
+  return `${name}, am analizat datele tale! 🤔 Ai un sold de **${fmt(summary.balance)}** și **${summary.count} tranzacții** înregistrate. Încearcă să mă întrebi: "Cum stau cu cheltuielile?", "Unde cheltuiesc cel mai mult?" sau "Dă-mi un sfat financiar"!`;
 }
 
 // -----------------------------------------------------------------------
@@ -189,7 +335,7 @@ export default function AdvicePage({ transactions, userId, userNickname }) {
 
     // generez raspunsul local bazat pe datele reale
     const response = generateResponse(trimmed, {
-      summary, monthSummary, categoryData, goals, name,
+      summary, monthSummary, categoryData, goals, name, personalTx,
     });
 
     setIsTyping(false);
@@ -205,11 +351,13 @@ export default function AdvicePage({ transactions, userId, userNickname }) {
     sendMessage(input);
   };
 
-  // intrebarile sugerate ca chips-uri
+  // intrebarile sugerate ca chips-uri - arata ce poate raspunde chatul
   const chips = [
     'Cum stau cu cheltuielile luna asta?',
+    'Pot să cumpăr ceva de 1000 RON?',
     'Unde cheltuiesc cel mai mult?',
-    'Pot să îmi permit un obiectiv nou?',
+    'Cât mai am disponibil luna asta?',
+    'Cum stau față de luna trecută?',
     'Dă-mi un sfat financiar',
   ];
 

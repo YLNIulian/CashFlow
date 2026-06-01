@@ -19,7 +19,7 @@ import {
 import { useScrollReveal } from '../shared/hooks.jsx';
 import { EmptyState, LoadingCard } from '../shared/components.jsx';
 
-// Fix 4+5: primesc si onDeposit ca sa pot anunta App.jsx sa refresheze tranzactiile
+// primesc si onDeposit ca sa pot anunta App.jsx sa refresheze tranzactiile dupa depunere
 export default function GoalsPage({ userId, transactions, onDeposit }) {
   const revealRef = useScrollReveal();
 
@@ -85,8 +85,8 @@ export default function GoalsPage({ userId, transactions, onDeposit }) {
     fetchGoals();
   };
 
-  // Fix 4+5: depun bani in obiectiv SI creez o tranzactie expense
-  // asa soldul total scade automat, fara sa schimb nimic din structura
+  // depun bani in obiectiv si creez si o tranzactie expense
+  // asa soldul total scade automat
   const handleDeposit = async (goal, amount) => {
     const currentAmount = Math.min(
       safeNumber(goal.currentAmount) + amount,

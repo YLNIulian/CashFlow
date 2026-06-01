@@ -342,6 +342,8 @@ export default function Dashboard({
   const [trendRange, setTrendRange] = useState('month');
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // ref pentru a putea scrolla automat la formular cand il deschid din header
+  const quickFormRef = useRef(null);
 
   /* ─── Filtrare și calcule ────────────────────────────────────────── */
   const personalTx = useMemo(() => getPersonalTransactions(transactions), [transactions]);
@@ -430,12 +432,20 @@ export default function Dashboard({
 
   /* ─── Handlers formular rapid ────────────────────────────────────── */
   const openQuickForm = (type) => {
-    setQuickOpen((previous) => (previous === type ? null : type));
+    // daca dau click pe acelasi tip, inchid formularul; altfel il deschid
+    const willOpen = quickOpen !== type;
+    setQuickOpen(willOpen ? type : null);
     setForm((previous) => ({
       ...previous,
       type,
       category: CATEGORIES[type][0].id,
     }));
+    // daca se deschide, scroll automat la formular ca userul sa il vada
+    if (willOpen) {
+      setTimeout(() => {
+        quickFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 60);
+    }
   };
 
   const handleDescriptionChange = (value) => {
@@ -500,7 +510,6 @@ export default function Dashboard({
               </span>
             </div>
 
-            {/* Fix 1: culoarea soldului e mereu neutra - nu mai e verde/rosu */}
             <div className="balance-amount">
               {formatCurrency(animatedBalance, { signed: true })}
             </div>
@@ -571,7 +580,8 @@ export default function Dashboard({
       <SetupChecklist transactions={personalTx} onNavigate={navigate} />
 
       {/* ── Formular rapid adăugare tranzacție ───────────────────── */}
-      <section className="quick-drawer-card scroll-reveal">
+      {/* ref pentru scroll automat cand se deschide din butonul de header */}
+      <section className="quick-drawer-card scroll-reveal" ref={quickFormRef}>
         <div className="quick-drawer-head">
           <div>
             <span className="section-mini-label">Quick actions</span>
